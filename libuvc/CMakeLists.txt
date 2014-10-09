@@ -87,7 +87,7 @@ link_directories(${Boost_LIBRARY_DIR})
 
 add_definitions(-g -O3)
 add_executable(test src/test.cpp)
-target_link_libraries(test uvc ${LIBUSB_LIBRARY_NAMES} ${OpenCV_LIBS} ${Boost_LIBRARIES})
+target_link_libraries(test uvc ${LIBUSB_LIBRARY_NAMES} ${OpenCV_LIBS} ${Boost_LIBRARIES} zmq)
 
 install(TARGETS uvc
   EXPORT libuvcTargets

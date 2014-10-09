@@ -7,13 +7,16 @@
 #include "fps_calc.h"
 #include <iostream>
 #include <fstream>
+#include <zmq.hpp>
 
-// number of frames to capture before exiting (default 300 frames at 18 fps => 16 seconds of capture time)
+#define ZMQ_PUB_PORT 5929
+#define ZMQ_SUB_PORT 5930
+
 #define MAX_FRAMES 200
 
 // vendor and product id of the first camera
 #define CAMERA_0_VID 0x05a9
-#define CAMERA_0_PID 0xa601
+#define CAMERA_0_PID 0xa603
 
 //Image format settings
 #define IMAGE_FRAME_WIDTH 1280
@@ -45,10 +48,27 @@ struct CameraController {
     uvc_stream_handle_t *strmh;
 };
 
+
+using namespace std;
+zmq::context_t context(1);
+zmq::socket_t zmq_pub(context, ZMQ_PUB);
+zmq::socket_t zmq_sub(context, ZMQ_SUB); 
+
+inline void sendMessage(char *message, uint32_t length) {
+    cout << "message length: " << length << endl;
+    zmq::message_t m(message, length, NULL);
+    zmq_pub.send(m, ZMQ_NOBLOCK);
+}
+
+
 int main(int argc, char **argv) {
   uvc_context_t *ctx;
   uvc_error_t res;
   CameraController camera[NUM_CAMS];
+
+  string pub_addr = "tcp://localhost:" + to_string(ZMQ_PUB_PORT);
+  cout << pub_addr << endl; 
+  zmq_pub.connect(pub_addr.c_str());
 
   res = uvc_init(&ctx, NULL);
   if (res < 0) {
@@ -77,7 +97,6 @@ int main(int argc, char **argv) {
       }
 
       printf("Device opened\n");
-      uvc_print_diag(camera[cam_idx].devh, stderr);
 
       res = uvc_get_stream_ctrl_format_size(
               camera[cam_idx].devh, &camera[cam_idx].ctrl, 
@@ -88,8 +107,6 @@ int main(int argc, char **argv) {
           uvc_perror(res, "get_mode");
           return -1;
       }
-
-      uvc_print_stream_ctrl(&camera[cam_idx].ctrl, stderr);
 
       res = uvc_stream_open_ctrl(camera[cam_idx].devh, &camera[cam_idx].strmh,
               &camera[cam_idx].ctrl);
@@ -123,8 +140,10 @@ int main(int argc, char **argv) {
 
           /* define DISPLAY if you want to see the picture in real time;
            * not recommended in general since it could cause you to drop frames */
+
 #ifdef DISPLAY
           if (frame != NULL && frame_count % 1 == 0) {
+              sendMessage((char *)frame->data, frame->data_bytes);
               std::vector<char> frame_data((char *)frame->data, (char *)frame->data + frame->data_bytes);
               Mat mImg = imdecode(Mat(frame_data), CV_LOAD_IMAGE_COLOR);
               string window_name = "img" + boost::lexical_cast<std::string>(cam_idx);
