@@ -125,6 +125,7 @@ int main(int argc, char **argv) {
            * not recommended in general since it could cause you to drop frames */
 #ifdef DISPLAY
           if (frame != NULL && frame_count % 1 == 0) {
+              std::vector<char> frame_data((char *)frame->data, (char *)frame->data + frame->data_bytes);
               Mat mImg = imdecode(Mat(frame_data), CV_LOAD_IMAGE_COLOR);
               string window_name = "img" + boost::lexical_cast<std::string>(cam_idx);
               Mat disp_img; 

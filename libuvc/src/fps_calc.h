@@ -11,7 +11,7 @@ do \
     ++count; \
     if (now - last >= 1.0) \
     { \
-      cerr << "Average framerate("<< _WHAT_ << "): " << double(count)/double(now - last) << " Hz. " << "\n"; \
+      std::cerr << "Average framerate("<< _WHAT_ << "): " << double(count)/double(now - last) << " Hz. " << "\n"; \
       count = 0; \
       last = now; \
     } \
