@@ -16,25 +16,11 @@
 #define CAMERA_0_VID 0x05a9
 #define CAMERA_0_PID 0xa601
 
-// vendor and product id of the second camera
-#define CAMERA_1_VID 0x05a9
-#define CAMERA_1_PID 0xa604
-
-// vendor and product id of the third camera
-#define CAMERA_2_VID 0x05a9
-#define CAMERA_2_PID 0xa605
-
 //Image format settings
 #define IMAGE_FRAME_WIDTH 1280
 #define IMAGE_FRAME_HEIGHT 800
 #define IMAGE_FRAME_RATE 10
 #define USE_MJPEG
-
-//Here's the format for YUYV
-//#define IMAGE_FRAME_WIDTH 1280
-//#define IMAGE_FRAME_HEIGHT 800
-//#define IMAGE_FRAME_RATE 7
-//#define USE_YUYV
 
 // uncomment this if you want to show a display
 #define DISPLAY
@@ -87,31 +73,6 @@ int main(int argc, char **argv) {
       puts("Device found");
   }
  
-/*
-  // connect to camera 2 with appropriate vendor and product id.  
-  res = uvc_find_device(
-          ctx, &camera[1].dev,
-          CAMERA_1_VID, CAMERA_1_PID, NULL);
-
-  if (res < 0) {
-      uvc_perror(res, "uvc_find_device");
-      puts("Device found");
-  }
-
-  res = uvc_find_device(
-          ctx, &camera[2].dev,
-          CAMERA_2_VID, CAMERA_2_PID, NULL);
-
-  if (res < 0) {
-      uvc_perror(res, "uvc_find_device");
-      puts("Device found");
-  }
-*/
-
-  ofstream myMpegFile;
-  myMpegFile.open("test_save.avi", ios::out | ios::binary | ios::app) ;
-
-
   //configure and start each stream
   for (int cam_idx = 0; cam_idx < NUM_CAMS; cam_idx++) { 
       res = uvc_open(camera[cam_idx].dev, &camera[cam_idx].devh);
@@ -124,20 +85,11 @@ int main(int argc, char **argv) {
       printf("Device opened\n");
       uvc_print_diag(camera[cam_idx].devh, stderr);
 
-#ifdef USE_MJPEG
       res = uvc_get_stream_ctrl_format_size(
               camera[cam_idx].devh, &camera[cam_idx].ctrl, 
               UVC_FRAME_FORMAT_MJPEG, IMAGE_FRAME_WIDTH,
               IMAGE_FRAME_HEIGHT, IMAGE_FRAME_RATE 
               );
-#endif
-#ifdef USE_YUYV
-      res = uvc_get_stream_ctrl_format_size(
-              camera[cam_idx].devh, &camera[cam_idx].ctrl, 
-              UVC_FRAME_FORMAT_YUYV, IMAGE_FRAME_WIDTH,
-              IMAGE_FRAME_HEIGHT, IMAGE_FRAME_RATE 
-              );
-#endif
       if (res < 0) {
           uvc_perror(res, "get_mode");
           return -1;
@@ -175,26 +127,10 @@ int main(int argc, char **argv) {
               uvc_perror(res, "get_frame");
           }
 
-          // put it on the buffer
-          if (frame != NULL) { 
-              buffer[cam_idx][frame_count] = uvc_allocate_frame(frame->width*frame->height *3);
-              uvc_duplicate_frame(frame, buffer[cam_idx][frame_count]);
-          } else { 
-              buffer[cam_idx][frame_count] = NULL;
-          }
-
-
           /* define DISPLAY if you want to see the picture in real time;
            * not recommended in general since it could cause you to drop frames */
 #ifdef DISPLAY
           if (frame != NULL && frame_count % 1 == 0) {
-              string fname = "data_live/cam_" + boost::lexical_cast<string>(frame_count) + "_" +  boost::lexical_cast<string>(cam_idx) + ".jpg";
-
-              ofstream myImg;
-              myImg.open(fname, ios::out | ios::binary | ios::app) ;
-              myImg.write((char*)frame->data, frame->data_bytes);
-              myImg.close();
-              std::vector<char> frame_data((char *)frame->data, (char *)frame->data + frame->data_bytes);
               Mat mImg = imdecode(Mat(frame_data), CV_LOAD_IMAGE_COLOR);
               string window_name = "img" + boost::lexical_cast<std::string>(cam_idx);
               Mat disp_img; 
@@ -208,47 +144,8 @@ int main(int argc, char **argv) {
       FPS_CALC("rate");
   }
 
-  size_t total_bytes = 0;
-  size_t total_frames = 0;
-  for (frame_count = 0; frame_count < MAX_FRAMES; frame_count++) {
-      for (int cam_idx = 0; cam_idx < NUM_CAMS; cam_idx++) { 
-          uvc_frame_t *frame = buffer[cam_idx][frame_count];
-
-          if (frame != NULL && frame_count % 10 == 0) {
-              total_bytes += frame->data_bytes;
-              total_frames++;
-              uvc_frame_t *rgb;
-              rgb = uvc_allocate_frame(frame->width * frame->height * 3);
-#ifdef USE_MJPEG
-              res = uvc_mjpeg2rgb(frame, rgb);
-#endif
-#ifdef USE_YUYV
-              res = uvc_any2rgb(frame, rgb);
-#endif
-              if (res) {
-                  cout << "conversion error: mjpeg2rgb" << endl;
-                  uvc_free_frame(rgb);
-
-              } else {
-                  IplImage* img = cvCreateImageHeader(cvSize(rgb->width, rgb->height), IPL_DEPTH_8U, 3);
-                  toOpenCV(rgb, img);
-                  Mat mImg(img); 
-                  cvtColor(mImg,mImg,CV_RGB2BGR);
-                  string window_name = "img" + boost::lexical_cast<std::string>(cam_idx);
-                  string fname = "data/cam_" + boost::lexical_cast<string>(frame_count) + "_" +  boost::lexical_cast<string>(cam_idx) + ".png";
-                  imwrite(fname, mImg);
-                  uvc_free_frame(rgb);
-              }
-          }
-      }
-      FPS_CALC("write to disk");
-  }
-  myMpegFile.close();
-
-  cout << "Average size of packet in bytes = " << total_bytes / ((double)NUM_CAMS*total_frames) << endl; 
   for (int cam_idx = 0; cam_idx < NUM_CAMS; cam_idx++) { 
       uvc_stream_close(camera[cam_idx].strmh); 
-
       uvc_close(camera[cam_idx].devh);
       uvc_unref_device(camera[cam_idx].dev);
   }
