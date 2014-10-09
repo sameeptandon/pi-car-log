@@ -3,7 +3,6 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <unistd.h>
-#include "synchronized_buffer.h"
 #include "libuvc/libuvc.h"
 #include "fps_calc.h"
 #include <iostream>
@@ -50,11 +49,6 @@ int main(int argc, char **argv) {
   uvc_context_t *ctx;
   uvc_error_t res;
   CameraController camera[NUM_CAMS];
-
-  vector<uvc_frame_t*> buffer[NUM_CAMS];
-  for (int cam_idx = 0; cam_idx < NUM_CAMS; cam_idx++) {
-      buffer[cam_idx] = vector<uvc_frame_t*>(MAX_FRAMES);
-  }
 
   res = uvc_init(&ctx, NULL);
   if (res < 0) {
