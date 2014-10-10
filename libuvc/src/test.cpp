@@ -14,7 +14,7 @@
 #define ZMQ_PUB_PORT 5929
 #define ZMQ_SUB_PORT 5930
 
-#define MAX_FRAMES 20000
+#define DATA_DIR "/media/052D-DE02/data"
 
 // vendor and product id of the first camera
 #define CAMERA_0_VID 0x05a9
@@ -29,7 +29,8 @@
 // number of cameras; don't change this
 #define NUM_CAMS 1
 
-static int frame_count = 0 ;
+static int frame_count = 0;
+static bool recording = false;
 using namespace cv;
 
 typedef boost::posix_time::ptime Time;
@@ -53,7 +54,7 @@ struct CameraController {
 using namespace std;
 zmq::context_t context(1);
 zmq::socket_t zmq_pub(context, ZMQ_PUB);
-zmq::socket_t zmq_sub(context, ZMQ_SUB); 
+zmq::socket_t zmq_sub(context, ZMQ_SUB);
 
 inline void sendMessage(char *message, uint32_t length) {
     cout << "message length: " << length << endl;
@@ -144,8 +145,14 @@ int main(int argc, char **argv) {
       if (res < 0)  {
         uvc_perror(res, "get_frame");
       }
-      Time currentTime(boost::posix_time::microsec_clock::local_time());
-      cout << currentTime << endl;
+      if (recording) { 
+        Time currentTime(boost::posix_time::microsec_clock::local_time());
+        string filename = string(DATA_DIR) + "/" + to_iso_string(currentTime) + ".jpg";
+        ofstream myImg;
+        myImg.open(filename.c_str(), ios::out | ios::binary);
+        myImg.write((char *) frame->data, frame->data_bytes);
+        myImg.close();
+      }
 
       if (frame != NULL && frame_count % 10 == 0) {
         sendMessage((char *)frame->data, frame->data_bytes);
@@ -157,6 +164,10 @@ int main(int argc, char **argv) {
       if (zmq_sub.recv(&command_msg, ZMQ_NOBLOCK) == true) {
         string command((const char*)command_msg.data(), command_msg.size());
         cout << command << endl;
+        if (command.compare("record") == 0)
+            recording = true;
+        else if (command.compare("stop") == 0)
+            recording = false;
       }
 
     } catch (const zmq::error_t &e) {}
