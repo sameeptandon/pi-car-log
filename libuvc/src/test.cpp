@@ -8,11 +8,13 @@
 #include <iostream>
 #include <fstream>
 #include <zmq.hpp>
+#include <boost/lexical_cast.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 #define ZMQ_PUB_PORT 5929
 #define ZMQ_SUB_PORT 5930
 
-#define MAX_FRAMES 200
+#define MAX_FRAMES 20000
 
 // vendor and product id of the first camera
 #define CAMERA_0_VID 0x05a9
@@ -24,14 +26,13 @@
 #define IMAGE_FRAME_RATE 10
 #define USE_MJPEG
 
-// uncomment this if you want to show a display
-#define DISPLAY
-
 // number of cameras; don't change this
 #define NUM_CAMS 1
 
 static int frame_count = 0 ;
 using namespace cv;
+
+typedef boost::posix_time::ptime Time;
 
 void toOpenCV(uvc_frame_t* rgb, IplImage *img) { 
   img->height = rgb->height;
@@ -66,9 +67,14 @@ int main(int argc, char **argv) {
   uvc_error_t res;
   CameraController camera[NUM_CAMS];
 
-  string pub_addr = "tcp://localhost:" + to_string(ZMQ_PUB_PORT);
+  string pub_addr = "tcp://localhost:" + boost::lexical_cast<string>(ZMQ_PUB_PORT);
   cout << pub_addr << endl; 
   zmq_pub.connect(pub_addr.c_str());
+
+  string sub_addr = "tcp://*:" + boost::lexical_cast<string>(ZMQ_SUB_PORT);
+  cout << sub_addr << endl; 
+  zmq_sub.bind(sub_addr.c_str());
+  zmq_sub.setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
 
   res = uvc_init(&ctx, NULL);
   if (res < 0) {
@@ -129,33 +135,33 @@ int main(int argc, char **argv) {
   }
 
   //Poll, Poll, Poll!
-  for (frame_count = 0; frame_count < MAX_FRAMES; frame_count++) {
-      for (int cam_idx = 0; cam_idx < NUM_CAMS; cam_idx++) { 
-          uvc_frame_t *frame;
-          //grab a frame
-          res = uvc_stream_get_frame(camera[cam_idx].strmh, &frame, 0);
-          if (res < 0)  {
-              uvc_perror(res, "get_frame");
-          }
+  while(true) {
+    frame_count++;
+    for (int cam_idx = 0; cam_idx < NUM_CAMS; cam_idx++) { 
+      uvc_frame_t *frame;
+      //grab a frame
+      res = uvc_stream_get_frame(camera[cam_idx].strmh, &frame, 0);
+      if (res < 0)  {
+        uvc_perror(res, "get_frame");
+      }
+      Time currentTime(boost::posix_time::microsec_clock::local_time());
+      cout << currentTime << endl;
 
-          /* define DISPLAY if you want to see the picture in real time;
-           * not recommended in general since it could cause you to drop frames */
+      if (frame != NULL && frame_count % 10 == 0) {
+        sendMessage((char *)frame->data, frame->data_bytes);
+      }
+    }
 
-#ifdef DISPLAY
-          if (frame != NULL && frame_count % 1 == 0) {
-              sendMessage((char *)frame->data, frame->data_bytes);
-              std::vector<char> frame_data((char *)frame->data, (char *)frame->data + frame->data_bytes);
-              Mat mImg = imdecode(Mat(frame_data), CV_LOAD_IMAGE_COLOR);
-              string window_name = "img" + boost::lexical_cast<std::string>(cam_idx);
-              Mat disp_img; 
-              resize(mImg, disp_img, Size(320, 180));
-              imshow(window_name.c_str(), disp_img);
-              waitKey(5);
-          }
-#endif
+    try { 
+      zmq::message_t command_msg;
+      if (zmq_sub.recv(&command_msg, ZMQ_NOBLOCK) == true) {
+        string command((const char*)command_msg.data(), command_msg.size());
+        cout << command << endl;
       }
 
-      FPS_CALC("rate");
+    } catch (const zmq::error_t &e) {}
+
+    FPS_CALC("rate");
   }
 
   for (int cam_idx = 0; cam_idx < NUM_CAMS; cam_idx++) { 

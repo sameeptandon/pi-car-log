@@ -81,7 +81,7 @@ message(${LIBUSB_LIBRARY_NAMES})
 
 find_package(OpenCV REQUIRED)
 link_directories(/opt/local/lib)
-find_package(Boost COMPONENTS program_options thread system)
+find_package(Boost COMPONENTS program_options thread system time)
 link_directories(${Boost_LIBRARY_DIR})
 
 
